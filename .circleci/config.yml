@@ -38,27 +38,19 @@ jobs:
             docker build -t circle-ci-demo-ri:$VERSION .
             docker tag circle-ci-demo-ri:$VERSION 833293893112.dkr.ecr.ap-south-1.amazonaws.com/circle-ci-demo-ri:$VERSION
             docker push 833293893112.dkr.ecr.ap-south-1.amazonaws.com/circle-ci-demo-ri:$VERSION
-
-  notify_success:
-    docker:
-      - image: cimg/base:stable
-    steps:
       - run:
-          name: Send Success Notification
+          name: Notify Success
+          when: on_success
           command: |
             curl -H 'Content-Type: application/json' \
                  -d "{\"text\": \"✅ Build succeeded for circle-ci-demo-ri version $(cat VERSION)\"}" \
                  $TEAMS_WEBHOOK_URL
-
-  notify_failure:
-    docker:
-      - image: cimg/base:stable
-    steps:
       - run:
-          name: Send Failure Notification
+          name: Notify Failure
+          when: on_fail
           command: |
             curl -H 'Content-Type: application/json' \
-                 -d "{\"text\": \" Build failed for circle-ci-demo-ri version $(cat VERSION). Please check logs.\"}" \
+                 -d "{\"text\": \"❌ Build failed for circle-ci-demo-ri version $(cat VERSION). Please check logs.\"}" \
                  $TEAMS_WEBHOOK_URL
 
 workflows:
@@ -69,10 +61,3 @@ workflows:
       - build_and_push:
           requires:
             - test
-      - notify_success:
-          requires:
-            - build_and_push
-      - notify_failure:
-          requires:
-            - build_and_push
-          when: on_fail
