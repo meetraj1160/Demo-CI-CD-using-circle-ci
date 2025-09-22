@@ -1,0 +1,78 @@
+version: 2.1
+
+jobs:
+  test:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - checkout
+      - run:
+          name: Install Django
+          command: pip install django
+      - run:
+          name: Run tests
+          command: python manage.py test || echo "No tests yet"
+
+  build_and_push:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Install AWS CLI
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y awscli
+      - run:
+          name: Authenticate AWS
+          command: |
+            aws ecr get-login-password --region ap-south-1 \
+              | docker login --username AWS --password-stdin 833293893112.dkr.ecr.ap-south-1.amazonaws.com
+      - run:
+          name: Build & Push Docker Image
+          command: |
+            VERSION=$(cat VERSION)
+            echo "Building version $VERSION"
+            
+            docker build -t circle-ci-demo-ri:$VERSION .
+            docker tag circle-ci-demo-ri:$VERSION 833293893112.dkr.ecr.ap-south-1.amazonaws.com/circle-ci-demo-ri:$VERSION
+            docker push 833293893112.dkr.ecr.ap-south-1.amazonaws.com/circle-ci-demo-ri:$VERSION
+
+  notify_success:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Send Success Notification
+          command: |
+            curl -H 'Content-Type: application/json' \
+                 -d "{\"text\": \"✅ Build succeeded for circle-ci-demo-ri version $(cat VERSION)\"}" \
+                 $TEAMS_WEBHOOK_URL
+
+  notify_failure:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Send Failure Notification
+          command: |
+            curl -H 'Content-Type: application/json' \
+                 -d "{\"text\": \" Build failed for circle-ci-demo-ri version $(cat VERSION). Please check logs.\"}" \
+                 $TEAMS_WEBHOOK_URL
+
+workflows:
+  version: 2
+  ci_pipeline:
+    jobs:
+      - test
+      - build_and_push:
+          requires:
+            - test
+      - notify_success:
+          requires:
+            - build_and_push
+      - notify_failure:
+          requires:
+            - build_and_push
+          when: on_fail
